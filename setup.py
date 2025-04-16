@@ -8,10 +8,9 @@ setup(
         "torch>=2.0.0",
         "transformers>=4.30.0",
         "regex>=2023.0.0",
+        "vllm>=0.2.0",
     ],
-    extras_require={
-        "gpu": ["vllm>=0.2.0"],
-    },
+
     author="Your Name",
     author_email="your.email@example.com",
     description="A simple RAG interface library with citations",
