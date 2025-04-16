@@ -10,6 +10,7 @@ A library for easy usage of custom pleias RAG models that generate high-quality,
 - [Output Structure](#output-structure)
 - [Response Sections](#response-sections)
 - [Citation System](#citation-system)
+- [Model Management](#model-management)
 - [Advanced Usage](#advanced-usage)
 - [Implementation Details](#implementation-details)
 
@@ -20,6 +21,7 @@ A library for easy usage of custom pleias RAG models that generate high-quality,
 - **Automated Citations**: Tracks and formats citations from source documents
 - **Metadata Management**: Preserves source document metadata
 - **JSON Export**: Provides structured responses for seamless integration
+- **Model Management**: Supports predefined models with automatic downloading functionality
 
 ## Installation
 
@@ -30,6 +32,9 @@ To be completed when the library is put somewhere
 ```python
 # Initialize with your preferred model
 rag = RAGWithCitations("/path_to_pleias_model")
+
+# Or use a predefined model with automatic downloading
+rag = RAGWithCitations("1b_rag", hf_token="your_huggingface_token")
 
 # Define query and sources
 query = "What is the capital of France?"
@@ -143,6 +148,32 @@ The capital of France is Paris[1]. It is the most populous city in France[1] and
 [1] "Paris is the capital and most populous city of France." [Source 1]
 ```
 
+## Model Management
+
+### Predefined Models
+
+The library supports using predefined models by name, which will be automatically downloaded:
+
+```python
+# Use a predefined model with automatic downloading
+rag = RAGWithCitations(
+    model_path_or_name="1b_rag",  # Predefined model name
+    hf_token="your_huggingface_token",  # Required for downloading
+    models_dir="./custom_models_dir"  # Optional, default is "./pleias_models"
+)
+```
+
+Currently available predefined models:
+- `"1b_rag"`: Maps to `"PleIAs/1b_rag_traceback"`
+
+### Model Download Process
+
+When using a predefined model name:
+1. The library checks if the model name is in the list of available models
+2. It attempts to download the model using the provided Hugging Face token
+3. The model is saved to the specified directory (default: `./pleias_models`)
+4. If download is successful, the local path is used; otherwise, it falls back to using the model name directly
+
 ## Advanced Usage
 
 ### Processing JSON Requests
@@ -184,7 +215,7 @@ The response structure from `process_request()` is:
 ```
 
 ### Customizing Generation Parameters
-It is reccomended to use the default parameters, as the models are optimized for them.
+It is recommended to use the default parameters, as the models are optimized for them.
 ```python
 rag = RAGWithCitations(
     model_path="your-model-path",
@@ -192,7 +223,9 @@ rag = RAGWithCitations(
     temperature=0.0,        # Sampling temperature (default: 0.0)
     top_p=0.95,             # Nucleus sampling parameter (default: 0.95)
     repetition_penalty=1.0, # Penalty to reduce repetition (default: 1.0)
-    trust_remote_code=True  # Whether to trust remote code (default: True)
+    trust_remote_code=True, # Whether to trust remote code (default: True)
+    hf_token="your_token",  # Required for downloading predefined models
+    models_dir="./models"   # Custom directory for downloaded models
 )
 ```
 
