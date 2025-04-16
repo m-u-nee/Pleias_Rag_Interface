@@ -3,32 +3,53 @@ import re
 import torch
 import json
 
-#############################################################
-# RAGWithCitations Class                                    #
-# A class for Retrieval-Augmented Generation with citations #
-#############################################################
-
 class RAGWithCitations:
     def __init__(
         self,
-        model_path: str,
+        model_path_or_name: str,
         max_tokens: int = 2048,
         temperature: float = 0.0,
         top_p: float = 0.95,
         repetition_penalty: float = 1.0,
-        trust_remote_code: bool = True
+        trust_remote_code: bool = True,
+        hf_token=None,
+        models_dir="./pleias_models"
     ):
         """
         Initialize the RAG Generator with either vLLM (if CUDA available) or transformers.
+        
         Args:
-            model_path: Path to the model or HuggingFace model name
+            model_path_or_name: Path to the model, HuggingFace model name, or name from available models:
+                               - "1b_rag": PleIAs/1b_rag_traceback
             max_tokens: Maximum number of tokens to generate
             temperature: Sampling temperature (higher = more creative)
             top_p: Top-p sampling parameter (lower = more focused)
             repetition_penalty: Repetition penalty to avoid loops
             trust_remote_code: Whether to trust remote code in model repo
+            hf_token: Hugging Face API token (required if using predefined model names)
+            models_dir: Directory where models will be stored (default: ./pleias_models)
         """
-        self.model_path = model_path
+        # Check if this is a predefined model name
+        AVAILABLE_MODELS = {
+            "1b_rag": "PleIAs/1b_rag_traceback",
+            # Add more models as they become available
+        }
+        
+        if model_path_or_name in AVAILABLE_MODELS:
+            # Try to use the download_model function if available
+            try:
+                from .model_downloader import download_model
+                if hf_token is None:
+                    raise ValueError("HF token is required to download models from Hugging Face")
+                model_path = download_model(model_path_or_name, hf_token, models_dir)
+                model_path_or_name = model_path
+                print(f"Using model from: {model_path}")
+            except ImportError:
+                # If the module isn't available, use the direct model name
+                print(f"Model downloader not available, using HF model name directly: {AVAILABLE_MODELS[model_path_or_name]}")
+                model_path_or_name = AVAILABLE_MODELS[model_path_or_name]
+        
+        self.model_path = model_path_or_name
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.top_p = top_p
