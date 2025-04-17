@@ -1,4 +1,4 @@
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Literal
 import re
 import torch
 import json
@@ -13,7 +13,8 @@ class RAGWithCitations:
         repetition_penalty: float = 1.0,
         trust_remote_code: bool = True,
         hf_token=None,
-        models_dir="./pleias_models"
+        models_dir="./pleias_models",
+        backend: Optional[Literal["vllm", "transformers", "llama_cpp"]] = None
     ):
         """
         Initialize the RAG Generator with either vLLM (if CUDA available) or transformers.
@@ -28,6 +29,7 @@ class RAGWithCitations:
             trust_remote_code: Whether to trust remote code in model repo
             hf_token: Hugging Face API token (required if using predefined model names)
             models_dir: Directory where models will be stored (default: ./pleias_models)
+            backend: Optional backend to use for model loading. If not specified, will use vLLM if CUDA is available and transformers otherwise.
         """
         # Check if this is a predefined model name
         AVAILABLE_MODELS = {
@@ -60,10 +62,15 @@ class RAGWithCitations:
         self.cuda_available = torch.cuda.is_available()
         print(f"CUDA available: {self.cuda_available}")
 
-        if self.cuda_available:
-            self._init_vllm()
-        else:
-            self._init_transformers()
+        backends_init = {
+            "vllm": self._init_vllm, 
+            "transformers": self._init_transformers,
+            "llama_cpp": self._init_llama_cpp
+                        }
+        chosen_backend = backend or ("vllm" if self.cuda_available else "transformers")
+        self.backend = chosen_backend
+        backends_init[chosen_backend]()
+
 
     #################################
     # Model Initialization Methods  #
@@ -98,8 +105,6 @@ class RAGWithCitations:
             stop_token_ids=[tokenizer.eos_token_id]
         )
 
-        self.backend = "vllm"
-
     def _init_transformers(self):
         """
         Initialize using transformers for CPU fallback.
@@ -119,8 +124,22 @@ class RAGWithCitations:
             trust_remote_code=self.trust_remote_code
         )
         print("Model loaded successfully with transformers")
-
-        self.backend = "transformers"
+        
+    def _init_llama_cpp(self):
+        """
+        Initialize the model using llama_cpp
+        """
+        from llama_cpp import Llama
+        
+        print(f"Loading model with llama_cpp from {self.model_path}...")
+        
+        self.model = Llama(
+            model_path=self.model_path,
+            n_ctx=4096,            
+            n_gpu_layers=0,    
+            verbose=False,    
+        )
+        print("Model loaded successfully with llama_cpp")
 
     ###################################
     # Prompt Formatting and Generation #
@@ -207,6 +226,35 @@ class RAGWithCitations:
         )
 
         return generated_text
+    
+    def _generate_llama_cpp(self, formatted_prompt: str) -> str:
+        """
+        Generate text using llama_cpp backend.
+        This method handles text generation when using the llama_cpp backend (CPU)
+        
+        Args:
+            formatted_prompt: The properly formatted input prompt
+
+        Returns:
+            Generated text response
+        """
+        
+        tokens = self.model.generate(
+                self.model.tokenize(formatted_prompt.encode("utf-8"), special=True), 
+                temp=self.temperature,
+                top_p=self.top_p,
+                repeat_penalty=self.repetition_penalty,
+                reset=True,
+            )
+        generated_text = ""
+
+        for i, t in enumerate(tokens):
+            piece = self.model.detokenize([t], special=True).decode("utf-8", errors="replace")    
+            if (piece == "<|end_of_text|>") | (i >= self.max_tokens):
+                break
+            generated_text += piece
+        
+        return generated_text.strip()
 
     #############################
     # Response Processing       #
@@ -367,10 +415,12 @@ class RAGWithCitations:
         formatted_prompt = self.format_prompt(query, sources)
 
         # Generate response using the appropriate backend
-        if self.backend == "vllm":
-            raw_response = self._generate_vllm(formatted_prompt)
-        else:
-            raw_response = self._generate_transformers(formatted_prompt)
+        backends_generation = {
+            "vllm": self._generate_vllm, 
+            "transformers": self._generate_transformers,
+            "llama_cpp": self._generate_llama_cpp
+                        }
+        raw_response = backends_generation[self.backend](formatted_prompt)
 
         # Process the response
         sections = self.extract_sections(raw_response)
